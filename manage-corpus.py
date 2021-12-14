@@ -1,9 +1,11 @@
 #!/usr/bin/python3
-# manage-corpus.py revision build-dir corpus-dir <list-of-new-files>
+# manage-corpus.py <list-of-new-files>
 #   If given a list of files, will try to maximally reduce all examples. If
 #   not given a list of files, will try to maximally reduce all files in the
 #   corpus. Will also print errors for any obvious malformed entiries
 #   encountered.
+#
+#   Uses configuration state from config.json
 #
 #   IMPORTANT: Assumes (but does not check) that binaries in build-dir
 #   correspond to a build of the source at revision.
@@ -28,12 +30,14 @@ from common import *
 visited = set()
 worklist = []
 
-revision = sys.argv[1]
-builddir = os.path.abspath(sys.argv[2])
-root = os.path.abspath(sys.argv[3])
+config = load_and_validate_comfig()
+revision = config["LLVM_BUILD_REVISION"]
+builddir = config["LLVM_BUILD_DIR"]
+root = os.path.abspath(config["CORPUS_DIR"])
+
 targets = None
-if len(sys.argv) > 4:
-    targets = [os.path.abspath(x) for x in sys.argv[4:]]
+if len(sys.argv) > 1:
+    targets = [os.path.abspath(x) for x in sys.argv[1:]]
     for f in glob.iglob(root + "/**", recursive=True):
         if os.path.isdir(f):
             continue

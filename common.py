@@ -522,3 +522,22 @@ def reduce_with_creduce(builddir, corpusdir, test):
             pass
         pass
     return
+
+def validate_and_canoncalize_config_path(config, key):
+    assert key in config
+    value = config[key]
+    value = os.path.expanduser(value)
+    value = os.path.abspath(value)
+    assert os.path.exists(value)
+    config[key] = value
+    return
+
+def load_and_validate_comfig():
+    with open("config.json", 'r') as f:
+        config = json.load(f)
+        validate_and_canoncalize_config_path(config, "LLVM_BUILD_DIR")
+        assert "LLVM_BUILD_REVISION"  in config
+        validate_and_canoncalize_config_path(config, "LLVM_SOURCE_DIR")
+        validate_and_canoncalize_config_path(config, "CORPUS_DIR")
+        return config
+
