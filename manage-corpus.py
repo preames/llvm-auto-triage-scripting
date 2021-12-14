@@ -1,7 +1,9 @@
 #!/usr/bin/python3
-# manage-corpus.py revision build-dir corpus-dir
-#   Given a corpus, try to maximal reduce all examples.  Will also print
-#   errors for any obvious malformed entiries in the corpus.
+# manage-corpus.py revision build-dir corpus-dir <list-of-new-files>
+#   If given a list of files, will try to maximally reduce all examples. If
+#   not given a list of files, will try to maximally reduce all files in the
+#   corpus. Will also print errors for any obvious malformed entiries
+#   encountered.
 #
 #   IMPORTANT: Assumes (but does not check) that binaries in build-dir
 #   correspond to a build of the source at revision.
@@ -29,6 +31,17 @@ worklist = []
 revision = sys.argv[1]
 builddir = os.path.abspath(sys.argv[2])
 root = os.path.abspath(sys.argv[3])
+targets = None
+if len(sys.argv) > 4:
+    targets = [os.path.abspath(x) for x in sys.argv[4:]]
+    for f in glob.iglob(root + "/**", recursive=True):
+        if os.path.isdir(f):
+            continue
+        if f in visited:
+            continue
+        if f in targets:
+            continue
+        visited.add(f)
 
 rescan_count = 0
 def rescan_corpus():
