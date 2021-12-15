@@ -52,10 +52,7 @@ def get_build_config_hash(builddir):
         files.append(alive_tv)
     return sha1_of_files(files)
 
-# Get the runline from test, and perform all substitions and additions needed.
-# %s is replaced with testsub, not the full path in test
-def get_full_runline(builddir, test, testsub):
-    runline = get_valid_run_line(test)
+def substitute_runline(runline, builddir, testsub):
     assert runline != None
     # Do approximately the same substitution LIT would; if a _very_
     # limited form thereof.
@@ -81,6 +78,13 @@ def get_full_runline(builddir, test, testsub):
     # as opt-alive.sh picks up the opt from the path.
     runline = ("PATH=%s:$PATH " % bindir) + runline
     return runline
+
+# Get the runline from test, and perform all substitions and additions needed.
+# %s is replaced with testsub, not the full path in test
+def get_full_runline(builddir, test, testsub):
+    runline = get_valid_run_line(test)
+    assert runline != None
+    return substitute_runline(runline, builddir, testsub)
 
 def run_test(test, builddir):
     runline = get_full_runline(builddir, test, os.path.abspath(test))
@@ -521,6 +525,73 @@ def reduce_with_creduce(builddir, corpusdir, test):
             log_reduction(corpusdir, reducertag, test, res)
             pass
         pass
+    return
+
+# Given a clang crash, see if we can produce a standalone opt/llc test
+# case.
+def convert_clang_test_to_opt_test(builddir, corpusdir, test):
+    runline = get_valid_run_line(test)
+    assert runline != None
+    cmd = runline.split(' ')[0]
+    if cmd != "clang":
+        return None
+
+    with tempfile.TemporaryDirectory() as workingdir, scoped_cd(workingdir):
+        print("Running clang-to-opt in %s" % workingdir)
+
+        # Make sure that the original test fails unmodified.
+        result = run_test(test, builddir)
+        if result.returncode == 0:
+            return None
+
+        # Extract the IR to be passed to opt
+        opt_runline = runline
+        opt_runline += " -emit-llvm -disable-llvm-optzns"
+        opt_runline += " -o candidate.ll"
+        opt_runline = substitute_runline(opt_runline, builddir, test)
+        completed = subprocess.run(opt_runline, capture_output=True,
+                                   timeout=30, shell=True)
+        if completed.returncode != 0:
+            print("Unable to extract IR - probably a frontend crash")
+            return None;
+
+        # TODO: Need to do better than just blindly assume O2, but need
+        # some real examples to play with.
+
+        # Run opt on the captured IR, if that fails, consider that a new test
+        # case and add it to the corpus
+        opt_runline = "opt -S -O2 < candidate.ll -o llc-candidate.ll \n"
+        opt_runline = substitute_runline(opt_runline, builddir, test)
+        completed = subprocess.run(opt_runline, capture_output=True,
+                                   timeout=30, shell=True)
+        if completed.returncode != 0:
+            candidate = "candidate.ll"
+            new_runline = "; RUN: opt -S -O2 < %s \n"
+            rewrite_candidate(new_runline, candidate)
+            result = run_test(candidate, builddir)
+            assert result.returncode != 0
+            res = add_candidate_to_corpus(corpusdir, candidate, True)
+            if None != res:
+                reducertag = "clang-to-opt-crash-unconstrained"
+                log_reduction(corpusdir, reducertag, test, res)
+                pass
+            return
+
+        # If opt didn't fail, try piping the output of opt to LLC, and
+        # see if we can create a backend test case.
+        candidate = "llc-candidate.ll"
+        new_runline = "; RUN: llc -O2 < %s \n"
+        rewrite_candidate(new_runline, candidate)
+        result = run_test(candidate, builddir)
+        if result.returncode == 0:
+            # Can't make progress
+            return None;
+        res = add_candidate_to_corpus(corpusdir, candidate, True)
+        if None != res:
+            reducertag = "clang-to-llc-crash-unconstrained"
+            log_reduction(corpusdir, reducertag, test, res)
+            pass
+        return
     return
 
 def validate_and_canoncalize_config_path(config, key):

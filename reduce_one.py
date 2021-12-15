@@ -34,5 +34,7 @@ elif reducer == "creduce":
     reduce_with_creduce(builddir, corpusdir, test)
 elif reducer == "opt-analysis-isolate-crash-unconstrained":
     vary_opt_pass(builddir, corpusdir, test)
+elif reducer == "clang-to-opt":
+    convert_clang_test_to_opt_test(builddir, corpusdir, test)
 else:
     print ("Unsupported reducer: %s" % reducer)
